@@ -2,7 +2,6 @@
 
 require 'optparse'
 require 'rubygems'
-require 'ruby-debug'
 require 'redis'
 
 options = {:host => 'localhost',
