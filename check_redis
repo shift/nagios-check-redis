@@ -14,7 +14,7 @@ optparser = OptionParser.new do |opt|
   opt.banner = "Usage: #{$0} -H <hostname> [options]"
   opt.on('-H', '--host HOSTNAME', 'Hostname') {|o| options[:host] = o if o }
   opt.on('-p', '--port', 'Port (Default: "6379")') {|o| options[:port] = o if o }
-  opt.on('-P', '--password', 'Password (Default: blank)') {|o| options[:password] = o if o }
+  opt.on('-P', '--password PASSWORD', 'Password (Default: blank)') {|o| options[:password] = o if o }
   opt.on('-T', '--timeout', 'Timeout in seconds (Default: 3)') {|o| options[:timeout] = o if o }
 end
 
@@ -34,8 +34,13 @@ class CheckRedis
     @r = Redis.new(opts)
     gather_stats
   rescue Errno::ECONNREFUSED
-    puts "CRITICAL - Unable to connect"
+    puts "CRITICAL - Connection refused."
     exit 1
+  rescue Errno::ENETUNREACH
+    puts "CRITICAL - Network is unreachable."
+    exit 1
+  rescue Errno::EHOSTUNREACH
+    puts "CRITICAL - No route to host."
   end
 
   private
