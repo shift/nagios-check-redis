@@ -41,6 +41,7 @@ class CheckRedis
     exit 1
   rescue Errno::EHOSTUNREACH
     puts "CRITICAL - No route to host."
+    exit 1
   end
 
   private
