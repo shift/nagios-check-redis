@@ -35,13 +35,13 @@ class CheckRedis
     gather_stats
   rescue Errno::ECONNREFUSED
     puts "CRITICAL - Connection refused."
-    exit 1
+    exit 2
   rescue Errno::ENETUNREACH
     puts "CRITICAL - Network is unreachable."
-    exit 1
+    exit 2
   rescue Errno::EHOSTUNREACH
     puts "CRITICAL - No route to host."
-    exit 1
+    exit 2
   end
 
   private
