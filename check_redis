@@ -22,8 +22,8 @@ args = []
 begin
   args = optparser.parse!
 rescue => e
-  $stderr.puts e
-  $stderr.puts optparser
+  $stderr.print e
+  $stderr.print optparser
   exit 0
 end
 
@@ -34,13 +34,13 @@ class CheckRedis
     @r = Redis.new(opts)
     gather_stats
   rescue Errno::ECONNREFUSED
-    puts "CRITICAL - Connection refused."
+    print "CRITICAL - Connection refused.\n"
     exit 2
   rescue Errno::ENETUNREACH
-    puts "CRITICAL - Network is unreachable."
+    print "CRITICAL - Network is unreachable.\n"
     exit 2
   rescue Errno::EHOSTUNREACH
-    puts "CRITICAL - No route to host."
+    print "CRITICAL - No route to host.\n"
     exit 2
   end
 
@@ -50,12 +50,12 @@ class CheckRedis
     @info = @r.info
     parse_info
     output_status
-    puts @status
+    print @status
     exit 0
   end
 
   def output_status
-    @status = "OK - version: #{@redis_version} | memory: #{@used_memory_human}"
+    @status = "OK - version: #{@redis_version} | memory: #{@used_memory_human}\n"
   end
 
   def parse_info
