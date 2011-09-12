@@ -13,7 +13,7 @@ options = {:host => 'localhost',
 optparser = OptionParser.new do |opt|
   opt.banner = "Usage: #{$0} -H <hostname> [options]"
   opt.on('-H', '--host HOSTNAME', 'Hostname') {|o| options[:host] = o if o }
-  opt.on('-p', '--port', 'Port (Default: "6379")') {|o| options[:port] = o if o }
+  opt.on('-p', '--port PORT', 'Port (Default: "6379")') {|o| options[:port] = o if o }
   opt.on('-P', '--password PASSWORD', 'Password (Default: blank)') {|o| options[:password] = o if o }
   opt.on('-T', '--timeout', 'Timeout in seconds (Default: 3)') {|o| options[:timeout] = o if o }
 end
