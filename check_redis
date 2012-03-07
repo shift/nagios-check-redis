@@ -8,7 +8,8 @@ options = {:host => 'localhost',
           :port => 6379,
           :db => 0,
           :password => nil,
-          :timeout => 3}
+          :timeout => 3,
+          :path => nil}
 
 optparser = OptionParser.new do |opt|
   opt.banner = "Usage: #{$0} -H <hostname> [options]"
@@ -16,6 +17,7 @@ optparser = OptionParser.new do |opt|
   opt.on('-p', '--port PORT', 'Port (Default: "6379")') {|o| options[:port] = o if o }
   opt.on('-P', '--password PASSWORD', 'Password (Default: blank)') {|o| options[:password] = o if o }
   opt.on('-T', '--timeout', 'Timeout in seconds (Default: 3)') {|o| options[:timeout] = o if o }
+  opt.on('-s', '--path FILE', 'Path to unix socket') {|o| options[:path] = o if o }
 end
 
 args = []
@@ -31,6 +33,7 @@ class CheckRedis
 
   def initialize(opts)
     @keys = %w(last_save_time redis_version total_connections_received connected_clients total_commands_processed connected_slaves uptime_in_seconds used_memory_human uptime_in_days changes_since_last_save)
+    puts opts.inspect
     @r = Redis.new(opts)
     gather_stats
   rescue Errno::ECONNREFUSED
@@ -41,6 +44,9 @@ class CheckRedis
     exit 2
   rescue Errno::EHOSTUNREACH
     print "CRITICAL - No route to host.\n"
+    exit 2
+  rescue Errno::EACCES
+    print "CRITICAL - Permission denied: #{opts[:path]}.\n"
     exit 2
   end
 
