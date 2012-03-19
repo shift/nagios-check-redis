@@ -4,110 +4,82 @@ require 'optparse'
 require 'rubygems'
 require 'redis'
 
-options = {:host => 'localhost',
-          :port => 6379,
-          :db => 0,
-          :password => nil,
-          :timeout => 3,
-          :path => nil}
+options = { :conn => { :host => "localhost", :port => 6379, :password => nil, :timeout => 5 }, 
+            :nagios => {}
+          }
 
-optparser = OptionParser.new do |opt|
-  opt.banner = "Usage: #{$0} -H <hostname> [options]"
-  opt.on('-H', '--host HOSTNAME', 'Hostname') {|o| options[:host] = o if o }
-  opt.on('-p', '--port PORT', 'Port (Default: "6379")') {|o| options[:port] = o if o }
-  opt.on('-P', '--password PASSWORD', 'Password (Default: blank)') {|o| options[:password] = o if o }
-  opt.on('-T', '--timeout', 'Timeout in seconds (Default: 3)') {|o| options[:timeout] = o if o }
-  opt.on('-s', '--path FILE', 'Path to unix socket') {|o| options[:path] = o if o }
-end
+OptionParser.new do |opt|
+  opt.banner = "Usage: #{$0} command <options>"
 
-args = []
-begin
-  args = optparser.parse!
-rescue => e
-  $stderr.print e
-  $stderr.print optparser
-  exit 0
-end
+  opt.separator ""
+  opt.separator "Nagios options:"
+
+  opt.on("-w", "--warn WARN", Integer, "Nagios warning level") { |warn| options[:nagios][:warn] = warn }
+  opt.on("-c", "--crit CRIT", Integer, "Nagios critical level") { |crit| options[:nagios][:crit] = crit }
+
+  opt.separator ""
+  opt.separator "Connection options:"
+
+  opt.on('-H', '--host [HOSTNAME]', 'Hostname (Default: "localhost")') { |o| options[:conn][:host] = o if o }
+  opt.on('-p', '--port [PORT]', 'Port (Default: "6379")') { |o| options[:conn][:port] = o if o }
+  opt.on('-P', '--password [PASSWORD]', 'Password (Default: blank)') { |o| options[:conn][:password] = o if o }
+  opt.on('-t', '--timeout [TIMEOUT]', Integer, 'Timeout in seconds (Default: 5)') { |o| options[:conn][:timeout] = o if o }
+
+  opt.on_tail("-h", "--help", "Show this message") do
+    puts opt
+    exit 0
+  end
+end.parse!
+
+command = ARGV[0]
 
 class CheckRedis
 
-  def initialize(opts)
-    @keys = %w(last_save_time redis_version total_connections_received connected_clients total_commands_processed connected_slaves uptime_in_seconds used_memory_human uptime_in_days changes_since_last_save)
-    @r = Redis.new(opts)
-    gather_stats
-  rescue Errno::ECONNREFUSED
-    print "CRITICAL - Connection refused.\n"
+  def initialize(opts, cmd)
+    @redis = Redis.new(opts[:conn])
+    gather_stats(opts[:nagios], cmd)
+
+  rescue Errno::ECONNREFUSED => e
+    puts e.message
     exit 2
-  rescue Errno::ENETUNREACH
-    print "CRITICAL - Network is unreachable.\n"
+  rescue Errno::ENETUNREACH => e
+    puts e.message
     exit 2
-  rescue Errno::EHOSTUNREACH
-    print "CRITICAL - No route to host.\n"
+  rescue Errno::EHOSTUNREACH => e
+    puts e.message
     exit 2
-  rescue Errno::EACCES
-    print "CRITICAL - Permission denied: #{opts[:path]}.\n"
+  rescue Errno::EACCES => e
+    puts e.message
     exit 2
   end
 
   private
 
-  def gather_stats
-    @info = @r.info
-    parse_info
-    output_status
-    print @status
-    exit 0
-  end
+  def gather_stats(options, cmd)
+    stats = @redis.info
+    if stats[cmd]
+      value = stats[cmd].to_i
 
-  def output_status
-    @status = "OK - version: #{@redis_version} | memory: #{@used_memory_human}\n"
-  end
+      if value >= options[:crit]
+        puts "CRIT: #{cmd} exceeds critical level of #{options[:crit]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
+        exit 2
+      elsif value >= options[:warn]
+        puts "WARN: #{cmd} exceeds warning level of #{options[:warn]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
+        exit 1
+      else
+        puts "OK: #{cmd} is ok | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
+        exit 0
+      end 
 
-  def parse_info
-    @info.each do |key,value|
-      send("parse_#{key}".to_sym, value) if @keys.include? key.to_s
+      # TODO: redis.info has some human_values
+
+    else
+      puts "UNKNOWN: No such key - #{cmd}"
+      exit 3
     end
+
   end
 
-  def parse_last_save_time(value)
-    @last_save_time = value
-  end
-
-  def parse_redis_version(value)
-    @redis_version = value
-  end
-
-  def parse_total_connections_received(value)
-    @total_connections_received = value
-  end
-
-  def parse_connected_clients(value)
-    @connected_clients = value
-  end
-
-  def parse_total_commands_processed(value)
-    @total_commands_processed = value
-  end
-
-  def parse_connected_slaves(value)
-    @connected_slaves = value
-  end
-
-  def parse_uptime_in_seconds(value)
-    @uptime_in_seconds = value
-  end
-
-  def parse_used_memory_human(value)
-    @used_memory_human = value
-  end
-
-  def parse_uptime_in_days(value)
-    @uptime_in_days = value
-  end
-
-  def parse_changes_since_last_save(value)
-    @changes_since_last_save = value
-  end
 end
 
-CheckRedis.new(options)
+CheckRedis.new(options, command)
