@@ -1,2 +1,3 @@
+* 2012-03-19 - Completely redone. Use any redis metric you want
 * 2012-03-07 - Add unix socket support (windowsrefund)
 * 2010-05-16 - Inital version
