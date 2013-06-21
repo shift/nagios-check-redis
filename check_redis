@@ -10,7 +10,7 @@ options = { :conn => { :host => "localhost", :port => 6379, :password => nil, :t
 
 OptionParser.new do |opt|
   opt.banner = "Usage: #{$0} command <options>"
-
+  
   opt.separator ""
   opt.separator "Nagios options:"
 
@@ -25,6 +25,10 @@ OptionParser.new do |opt|
   opt.on('-P', '--password [PASSWORD]', 'Password (Default: blank)') { |o| options[:conn][:password] = o if o }
   opt.on('-t', '--timeout [TIMEOUT]', Integer, 'Timeout in seconds (Default: 5)') { |o| options[:conn][:timeout] = o if o }
 
+  opt.on('-D', '--database [DATABASE]', Integer, 'If using key, select db (Default: 0)') { |o| options[:conn][:db] = o if o }
+  options[:use_stats] = 1
+  opt.on('-K', '--key', 'Use redis key instead of stats') { |o| options[:use_stats] = 0 if o }
+
   opt.on_tail("-h", "--help", "Show this message") do
     puts opt
     exit 0
@@ -37,7 +41,25 @@ class CheckRedis
 
   def initialize(opts, cmd)
     @redis = Redis.new(opts[:conn])
-    gather_stats(opts[:nagios], cmd)
+    if (opts[:use_stats] == 1) 
+      stats = @redis.info
+      if stats[cmd]
+        value = stats[cmd].to_i
+      else
+        puts "UNKNOWN: No such key in info - #{cmd}"
+        exit 3
+      end
+    else
+      keyvalue = @redis.get(cmd)
+      if keyvalue
+        value = stats.to_i
+      else
+        puts "UNKNOWN: No such key - #{cmd}"
+        exit 3
+      end
+    end
+
+    check_result(value, opts[:nagios], cmd)
 
   rescue Errno::ECONNREFUSED => e
     puts e.message
@@ -51,15 +73,14 @@ class CheckRedis
   rescue Errno::EACCES => e
     puts e.message
     exit 2
+  rescue Redis::CommandError => e
+    puts "Did you enter the correct password? #{e.message}"
+    exit 3
   end
 
   private
 
-  def gather_stats(options, cmd)
-    stats = @redis.info
-    if stats[cmd]
-      value = stats[cmd].to_i
-
+  def check_result(value, options, cmd)
       if value >= options[:crit]
         puts "CRIT: #{cmd} exceeds critical level of #{options[:crit]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
         exit 2
@@ -72,12 +93,6 @@ class CheckRedis
       end 
 
       # TODO: redis.info has some human_values
-
-    else
-      puts "UNKNOWN: No such key - #{cmd}"
-      exit 3
-    end
-
   end
 
 end
