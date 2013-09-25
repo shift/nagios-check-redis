@@ -16,6 +16,8 @@ OptionParser.new do |opt|
 
   opt.on("-w", "--warn WARN", Integer, "Nagios warning level") { |warn| options[:nagios][:warn] = warn }
   opt.on("-c", "--crit CRIT", Integer, "Nagios critical level") { |crit| options[:nagios][:crit] = crit }
+  options[:invert] = 0
+  opt.on('-i', '--invert', 'Invert the warning and critical thresholds (less than instead of greater than or equal to)') { |o| options[:invert] = 1 if o }
 
   opt.separator ""
   opt.separator "Connection options:"
@@ -59,7 +61,7 @@ class CheckRedis
       end
     end
 
-    check_result(value, opts[:nagios], cmd)
+    check_result(value, opts[:nagios], cmd, opts[:invert])
 
   rescue Errno::ECONNREFUSED => e
     puts e.message
@@ -80,12 +82,18 @@ class CheckRedis
 
   private
 
-  def check_result(value, options, cmd)
-      if value >= options[:crit]
+  def check_result(value, options, cmd, invert)
+      if invert == 0 && value >= options[:crit]
         puts "CRIT: #{cmd} exceeds critical level of #{options[:crit]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
         exit 2
-      elsif value >= options[:warn]
+      elsif invert == 0 && value >= options[:warn]
         puts "WARN: #{cmd} exceeds warning level of #{options[:warn]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
+        exit 1
+      elsif invert == 1 && value < options[:crit]
+        puts "WARN: #{cmd} is lower than the critical level of #{options[:crit]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
+        exit 2
+      elsif invert == 1 && value < options[:warn]
+        puts "WARN: #{cmd} is lower than warning level of #{options[:warn]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
         exit 1
       else
         puts "OK: #{cmd} is ok | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
