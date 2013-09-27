@@ -30,6 +30,7 @@ OptionParser.new do |opt|
   opt.on('-D', '--database [DATABASE]', Integer, 'If using key, select db (Default: 0)') { |o| options[:conn][:db] = o if o }
   options[:use_stats] = 1
   opt.on('-K', '--key', 'Use redis key instead of stats') { |o| options[:use_stats] = 0 if o }
+  opt.on('-o', '--operation [OPERATION]', 'A redis operation (redis command) to perform. (Default: \'info\', \'get\' if -K)') { |o| options[:operation] = o if o }
 
   opt.on_tail("-h", "--help", "Show this message") do
     puts opt
@@ -52,9 +53,14 @@ class CheckRedis
         exit 3
       end
     else
-      keyvalue = @redis.get(cmd)
+      if opts[:operation]
+        keyvalue = @redis.send("#{opts[:operation]}", cmd)
+      else
+        keyvalue = @redis.get(cmd)
+      end
+
       if keyvalue
-        value = stats.to_i
+        value = keyvalue.to_i
       else
         puts "UNKNOWN: No such key - #{cmd}"
         exit 3
