@@ -96,7 +96,7 @@ class CheckRedis
         puts "WARN: #{cmd} exceeds warning level of #{options[:warn]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
         exit 1
       elsif invert == 1 && value < options[:crit]
-        puts "WARN: #{cmd} is lower than the critical level of #{options[:crit]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
+        puts "CRIT: #{cmd} is lower than the critical level of #{options[:crit]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
         exit 2
       elsif invert == 1 && value < options[:warn]
         puts "WARN: #{cmd} is lower than warning level of #{options[:warn]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
