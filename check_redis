@@ -5,6 +5,7 @@ require 'rubygems'
 require 'redis'
 
 options = { :conn => { :host => "localhost", :port => 6379, :password => nil, :timeout => 5 }, 
+            :graphite => {},
             :nagios => {}
           }
 
@@ -32,6 +33,16 @@ OptionParser.new do |opt|
   opt.on('-K', '--key', 'Use redis key instead of stats') { |o| options[:use_stats] = 0 if o }
   opt.on('-o', '--operation [OPERATION]', 'A redis operation (redis command) to perform. (Default: \'info\', \'get\' if -K)') { |o| options[:operation] = o if o }
 
+  opt.separator ""
+  opt.separator "Graphite options:"
+
+  opt.on('-G', '--graphite-server [HOSTNAME]', 'Graphite Hostname') { |o| options[:graphite][:host] = o if o }
+  opt.on('-O', '--graphite-port [PORT]', 'Graphite Port') { |o| options[:graphite][:port] = o if o }
+  opt.on('-M', '--metric-prefix [PREFIX]', 'Metric Prefix, command will be appended to it') { |o| options[:graphite][:metric] = o if o }
+  opt.on('-R', '--graph-elapsed-time', 'Also graph the time the check took') { |o| options[:graphite][:graph_elapsed_time] = o if o }
+
+  opt.separator ""
+
   opt.on_tail("-h", "--help", "Show this message") do
     puts opt
     exit 0
@@ -43,6 +54,7 @@ command = ARGV[0]
 class CheckRedis
 
   def initialize(opts, cmd)
+    start_time = Time.now
     @redis = Redis.new(opts[:conn])
     if (opts[:use_stats] == 1) 
       stats = @redis.info
@@ -67,7 +79,16 @@ class CheckRedis
       end
     end
 
-    check_result(value, opts[:nagios], cmd, opts[:invert])
+    # Determine how long it took to query Redis
+    stop_time = Time.now
+    elapsed_time = (stop_time - start_time)
+
+    # Report results to Graphite
+    if opts[:graphite]
+      graph_result(value, opts[:graphite], cmd, elapsed_time)
+    end
+
+    check_result(value, opts[:nagios], cmd, opts[:invert], elapsed_time)
 
   rescue Errno::ECONNREFUSED => e
     puts e.message
@@ -88,25 +109,33 @@ class CheckRedis
 
   private
 
-  def check_result(value, options, cmd, invert)
+  def check_result(value, options, cmd, invert, elapsed_time)
       if invert == 0 && value >= options[:crit]
-        puts "CRIT: #{cmd} exceeds critical level of #{options[:crit]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
+        puts "CRIT: #{cmd} exceeds critical level of #{options[:crit]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};; #{cmd}-elapsedTime=#{elapsed_time}"
         exit 2
       elsif invert == 0 && value >= options[:warn]
-        puts "WARN: #{cmd} exceeds warning level of #{options[:warn]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
+        puts "WARN: #{cmd} exceeds warning level of #{options[:warn]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};; #{cmd}-elapsedTime=#{elapsed_time}"
         exit 1
       elsif invert == 1 && value < options[:crit]
-        puts "CRIT: #{cmd} is lower than the critical level of #{options[:crit]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
+        puts "CRIT: #{cmd} is lower than the critical level of #{options[:crit]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};; #{cmd}-elapsedTime=#{elapsed_time}"
         exit 2
       elsif invert == 1 && value < options[:warn]
-        puts "WARN: #{cmd} is lower than warning level of #{options[:warn]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
+        puts "WARN: #{cmd} is lower than warning level of #{options[:warn]} : #{value} | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};; #{cmd}-elapsedTime=#{elapsed_time}"
         exit 1
       else
-        puts "OK: #{cmd} is ok | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};;"
+        puts "OK: #{cmd} is ok | #{cmd}=#{value};#{options[:warn]};#{options[:crit]};; #{cmd}-elapsedTime=#{elapsed_time}"
         exit 0
       end 
 
-      # TODO: redis.info has some human_values
+  end
+
+  def graph_result(value, options, cmd, elapsed_time)
+    require 'graphite-api'
+    graphite_client = GraphiteAPI.new( graphite: "#{options[:host]}:#{options[:port]}" )
+    graphite_client.metrics "#{options[:metric]}.#{cmd}" => value
+    if options[:graph_elapsed_time]
+      graphite_client.metrics "#{options[:metric]}.#{cmd}-elapsedTime" => elapsed_time
+    end
   end
 
 end
