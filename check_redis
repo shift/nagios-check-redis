@@ -56,8 +56,15 @@ class CheckRedis
   def initialize(opts, cmd)
     start_time = Time.now
     @redis = Redis.new(opts[:conn])
-    if (opts[:use_stats] == 1) 
+    if (opts[:use_stats] == 1)
       stats = @redis.info
+      # if role is passed as the key, use the master or slave offset as the real key to check
+      if cmd == "role"
+        role = stats[cmd]
+        if role == "master" || role == "slave"
+          cmd = "#{role}_repl_offset"
+        end
+      end
       if stats[cmd]
         value = stats[cmd].to_i
       else
